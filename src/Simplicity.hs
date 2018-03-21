@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GADTs, DataKinds, KindSignatures , LambdaCase #-}
 
+module Simplicity where
+
 import Prelude hiding (not)
 
 -- The Simplicity type language has three type constructs:
@@ -17,7 +19,6 @@ data SimplicityType =
   | SimplicityType :+: SimplicityType
   | SimplicityType :*: SimplicityType
     deriving Show
-
 
 infixl 5 :+:
 infixl 6 :*:
@@ -74,6 +75,9 @@ zero = L Un
 
 one :: SimplicityValue Bit
 one = R Un
+
+exampleHalfAdder :: SimplicityValue (Bit :*: Bit)
+exampleHalfAdder = sem halfAdder $  P one zero
 
 main :: IO ()
 main = return ()
