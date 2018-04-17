@@ -3,7 +3,7 @@
 {-# LANGUAGE GADTs               #-}
 -- {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
--- {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 
 module BitMachine where
@@ -166,44 +166,29 @@ bitExample' = newFrame 4
 run :: BState a -> Maybe BitState
 run sth = execStateT sth $ S [] []
 
--- showSize :: forall a . HasBitSize a => Proxy a -> Int
--- showSize _ = bitSize (Proxy :: Proxy a)
-
--- class HasBitSize (a :: SimplicityType) where
---   bitSize :: Int
-
--- instance HasBitSize U where
---   bitSize = 0
-
--- instance (HasBitSize a, HasBitSize b) => HasBitSize (a :+: b) where
---   bitSize = 1 + max (bitSize @a) (bitSize @b)
-
--- instance (HasBitSize a, HasBitSize b) => HasBitSize (a :*: b) where
---   bitSize = bitSize @a + bitSize @b
-
 translate :: forall a b. SimplicityExpr a b -> BState ()
-translate                             Iden = copy (bitSize (Proxy :: Proxy a))
+translate                             Iden = copy (bitSize @a)
 translate                             Unit = nop
-translate (Comp (s::SimplicityExpr a e) t) = newFrame (bitSize (Proxy :: Proxy e))
+translate (Comp (s::SimplicityExpr a e) t) = newFrame (bitSize @e)
                                           >> translate s
                                           >> moveFrame
                                           >> translate t
                                           >> dropFrame
 translate (Injl t) = write 0
-                  >> skip (padL (Proxy :: Proxy b))
+                  >> skip (padL @b)
                   >> translate t
 translate (Injr t) = write 1
-                  >> skip (padL (Proxy :: Proxy b))
+                  >> skip (padL @b)
                   >> translate t
 translate (Case (s::SimplicityExpr (e ':*: f) b) (t::SimplicityExpr (g ':*: h) b)) = do
     r <- read
     case r of
-        0 -> let pad = 1 + padL (Proxy :: Proxy (e ':+: g))
+        0 -> let pad = 1 + padL @(e ':+: g)
              in
                 fwd pad
              >> translate s
              >> bwd pad
-        1 -> let pad = 1 + padR (Proxy :: Proxy (e ':+: g))
+        1 -> let pad = 1 + padR @(e ':+: g)
              in
                 fwd pad
              >> translate t
@@ -211,6 +196,6 @@ translate (Case (s::SimplicityExpr (e ':*: f) b) (t::SimplicityExpr (g ':*: h) b
         _ -> throw
 translate (Pair s t) = translate s >> translate t
 translate (Take t)   = translate t
-translate (Drop t)   = fwd (droppedSize (Proxy :: Proxy a))
+translate (Drop t)   = fwd (droppedSize @a)
                     >> translate t
-                    >> bwd (droppedSize (Proxy :: Proxy a))
+                    >> bwd (droppedSize @a)

@@ -5,6 +5,7 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 
 module Simplicity where
@@ -29,33 +30,31 @@ data SimplicityType =
 infixl 5 :+:
 infixl 6 :*:
 
-data Proxy (a :: SimplicityType) = Proxy
-
 class HasBitSize (a :: SimplicityType) where
-  bitSize :: Proxy a -> Int
+  bitSize :: Int
 
 instance HasBitSize 'U where
-  bitSize _ = 0
+  bitSize = 0
 
 instance (HasBitSize a, HasBitSize b) => HasBitSize (a ':+: b) where
-  bitSize _ = 1 + max (bitSize (Proxy :: Proxy a)) (bitSize (Proxy :: Proxy b))
+  bitSize = 1 + max (bitSize @a) (bitSize @b)
 
 instance (HasBitSize a, HasBitSize b) => HasBitSize (a ':*: b) where
-  bitSize _ = bitSize (Proxy :: Proxy a) + bitSize (Proxy :: Proxy b)
+  bitSize = bitSize @a + bitSize @b
 
 class CanPad (a :: SimplicityType) where
-  padL :: Proxy a -> Int
-  padR :: Proxy a -> Int
+  padL :: Int
+  padR :: Int
 
 instance (HasBitSize a, HasBitSize b) => CanPad (a ':+: b) where
-  padL _ = max (bitSize (Proxy :: Proxy a)) (bitSize (Proxy :: Proxy b)) - (bitSize (Proxy :: Proxy a))
-  padR _ = max (bitSize (Proxy :: Proxy a)) (bitSize (Proxy :: Proxy b)) - (bitSize (Proxy :: Proxy b))
+  padL = max (bitSize @a) (bitSize @b) - (bitSize @a)
+  padR = max (bitSize @a) (bitSize @b) - (bitSize @b)
 
 class CanDrop (a :: SimplicityType) where
-  droppedSize :: Proxy a -> Int
+  droppedSize :: Int
 
 instance (HasBitSize a, HasBitSize b) => CanDrop (a ':*: b) where
-  droppedSize _ = bitSize (Proxy :: Proxy a)
+  droppedSize = bitSize @a
 
 -- SimplicityExpr has an input type and an output type
 data SimplicityExpr :: SimplicityType -> SimplicityType -> * where
