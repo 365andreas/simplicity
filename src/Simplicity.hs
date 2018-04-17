@@ -1,9 +1,15 @@
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE GADTs, DataKinds, KindSignatures , LambdaCase #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators       #-}
 
 module Simplicity where
 
-import Prelude hiding (not)
+import           Prelude hiding (not)
 
 -- The Simplicity type language has three type constructs:
 -- unit, pairs, sums.
@@ -23,31 +29,66 @@ data SimplicityType =
 infixl 5 :+:
 infixl 6 :*:
 
+data Proxy (a :: SimplicityType) = Proxy
+
+class HasBitSize (a :: SimplicityType) where
+  bitSize :: Proxy a -> Int
+
+instance HasBitSize 'U where
+  bitSize _ = 0
+
+instance (HasBitSize a, HasBitSize b) => HasBitSize (a ':+: b) where
+  bitSize _ = 1 + max (bitSize (Proxy :: Proxy a)) (bitSize (Proxy :: Proxy b))
+
+instance (HasBitSize a, HasBitSize b) => HasBitSize (a ':*: b) where
+  bitSize _ = bitSize (Proxy :: Proxy a) + bitSize (Proxy :: Proxy b)
+
+class CanPad (a :: SimplicityType) where
+  padL :: Proxy a -> Int
+  padR :: Proxy a -> Int
+
+instance (HasBitSize a, HasBitSize b) => CanPad (a ':+: b) where
+  padL _ = max (bitSize (Proxy :: Proxy a)) (bitSize (Proxy :: Proxy b)) - (bitSize (Proxy :: Proxy a))
+  padR _ = max (bitSize (Proxy :: Proxy a)) (bitSize (Proxy :: Proxy b)) - (bitSize (Proxy :: Proxy b))
+
+class CanDrop (a :: SimplicityType) where
+  droppedSize :: Proxy a -> Int
+
+instance (HasBitSize a, HasBitSize b) => CanDrop (a ':*: b) where
+  droppedSize _ = bitSize (Proxy :: Proxy a)
+
 -- SimplicityExpr has an input type and an output type
 data SimplicityExpr :: SimplicityType -> SimplicityType -> * where
-    Iden :: SimplicityExpr a a
-    Unit :: SimplicityExpr a U
-    Comp :: SimplicityExpr a b -> SimplicityExpr b c -> SimplicityExpr a c
-    Injl :: SimplicityExpr a b -> SimplicityExpr a (b :+: c)
-    Injr :: SimplicityExpr a c -> SimplicityExpr a (b :+: c)
-    Case :: SimplicityExpr (a :*: c) d -> SimplicityExpr (b :*: c) d -> SimplicityExpr ((a :+: b) :*: c) d
-    Pair :: SimplicityExpr a b -> SimplicityExpr a c -> SimplicityExpr a (b :*: c)
-    Take :: SimplicityExpr a c -> SimplicityExpr (a :*: b) c
-    Drop :: SimplicityExpr b c -> SimplicityExpr (a :*: b) c
+    Iden :: HasBitSize a =>
+            SimplicityExpr a a
+    Unit :: SimplicityExpr a 'U
+    Comp :: (HasBitSize a, HasBitSize b, HasBitSize c) =>
+            SimplicityExpr a b -> SimplicityExpr b c -> SimplicityExpr a c
+    Injl :: (HasBitSize a, HasBitSize b, HasBitSize c) =>
+            SimplicityExpr a b -> SimplicityExpr a (b ':+: c)
+    Injr :: (HasBitSize a, HasBitSize b, HasBitSize c) =>
+            SimplicityExpr a c -> SimplicityExpr a (b ':+: c)
+    Case :: (HasBitSize a, HasBitSize b, HasBitSize c, HasBitSize d) =>
+            SimplicityExpr (a ':*: c) d -> SimplicityExpr (b ':*: c) d
+            -> SimplicityExpr ((a ':+: b) ':*: c) d
+    Pair :: SimplicityExpr a b -> SimplicityExpr a c -> SimplicityExpr a (b ':*: c)
+    Take :: SimplicityExpr a c -> SimplicityExpr (a ':*: b) c
+    Drop :: (HasBitSize a, HasBitSize b, HasBitSize c) =>
+            SimplicityExpr b c -> SimplicityExpr (a ':*: b) c
 
-type Bit = U :+: U
+type Bit = 'U ':+: 'U
 
 not :: SimplicityExpr Bit Bit
 not = Comp (Pair Iden Unit) (Case (Injr Unit) (Injl Unit))
 
-halfAdder :: SimplicityExpr (Bit :*: Bit) (Bit :*: Bit)
+halfAdder :: SimplicityExpr (Bit ':*: Bit) (Bit ':*: Bit)
 halfAdder = Case (Drop (Pair (Injl Unit) Iden)) (Drop (Pair Iden not))
 
 data SimplicityValue :: SimplicityType -> * where
-    Un  :: SimplicityValue U
-    P   :: SimplicityValue a -> SimplicityValue b -> SimplicityValue (a :*: b)
-    L   :: SimplicityValue a -> SimplicityValue (a :+: b)
-    R   :: SimplicityValue b -> SimplicityValue (a :+: b)
+    Un  :: SimplicityValue 'U
+    P   :: SimplicityValue a -> SimplicityValue b -> SimplicityValue (a ':*: b)
+    L   :: SimplicityValue a -> SimplicityValue (a ':+: b)
+    R   :: SimplicityValue b -> SimplicityValue (a ':+: b)
 
 instance Show (SimplicityValue a) where
     show  Un     = "()"
@@ -76,8 +117,6 @@ zero = L Un
 one :: SimplicityValue Bit
 one = R Un
 
-exampleHalfAdder :: SimplicityValue (Bit :*: Bit)
+-- show exampleHalfAdder
+exampleHalfAdder :: SimplicityValue (Bit ':*: Bit)
 exampleHalfAdder = sem halfAdder $  P one zero
-
-main :: IO ()
-main = return ()
